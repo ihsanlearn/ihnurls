@@ -5,7 +5,7 @@
 |  |   Y  \   |  \  |  /|  | \/  |__\___ \ 
 |__|___|  /___|  /____/ |__|  |____/____  >
         \/     \/                       \/ 
-</pre>\
+</pre>
 Advanced Asynchronous URL Extraction, Filtering & Recon Toolkit  
 <br>
 
