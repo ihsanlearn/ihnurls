@@ -26,6 +26,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Set, Tuple, Dict
 
+ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
+
 # third-party
 try:
     from rich.console import Console
@@ -76,8 +78,7 @@ def cmd_exists(cmd: str) -> bool:
 def ensure_dir(p: Path):
     p.mkdir(parents=True, exist_ok=True)
 
-# Parsing -lraw lines like:
-# https://example.com [404] [Title] [Server,Vendor]
+# Parsing -lraw lines like: https://example.com [404] [Title] [Server,Vendor]
 RAW_LINE_RE = re.compile(r"(?P<url>https?://\S+)\s*\[(?P<code>\d{3})\]", re.IGNORECASE)
 
 def parse_lraw_line(line: str) -> Optional[Tuple[str, int]]:
@@ -102,15 +103,25 @@ async def run_tool_collect(cmd: List[str], input_data: Optional[List[str]] = Non
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
+
+        stdout_data, stderr_data = (b"", b"")
+
         if input_data:
             stdin_data = "\n".join(input_data).encode()
-            await proc.communicate(stdin_data)
+            # communicate() mengirim stdin, membaca stdout/stderr, DAN menunggu proses selesai
+            stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(stdin_data), timeout=timeout)
         else:
+            # Jika tidak ada stdin, baca stdout secara manual dan tunggu
+            stdout_data = await asyncio.wait_for(proc.stdout.read(), timeout=timeout)
             await proc.wait()
-        out = await proc.stdout.read()
+
+        out = stdout_data # Gunakan stdout_data yang ditangkap
         text = out.decode(errors="ignore")
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         return lines
+    except asyncio.TimeoutError:
+        proc.kill()
+        return []
     except Exception as e:
         return []
 
@@ -212,6 +223,7 @@ class IHNUrls:
         if not self.httpx_hosts or not self.httpx_hosts.exists():
             raise SystemExit("Hosts file not available for crawling.")
         hosts = [ln.strip() for ln in self.httpx_hosts.read_text().splitlines() if ln.strip()]
+
         # run wayback/gau per-host with concurrency
         tasks = []
         semaphore = asyncio.Semaphore(self.args.concurrency)
@@ -250,14 +262,17 @@ class IHNUrls:
     def ingest_lraw(self, path: Path, sc_filter: Optional[Set[int]] = None):
         self.log(f"Parsing raw-lines file: {path}")
         lines = path.read_text().splitlines()
+
         for ln in lines:
+            ln = ANSI_RE.sub('', ln)
             parsed = parse_lraw_line(ln)
             if not parsed:
                 continue
             url, code = parsed
-            # If sc_filter supplied, only add lines with matching codes (code==0 means unknown)
-            if sc_filter and code != 0 and code not in sc_filter:
+
+            if sc_filter and code not in sc_filter:
                 continue
+
             clean = normalize_url(url)
             if not EXT_FILTER_RE.search(clean):
                 self.all_raw.add(clean)
@@ -267,13 +282,16 @@ class IHNUrls:
         self.all_urls = set(self.all_raw)
         self.log(f"Merged into {len(self.all_urls)} unique URLs")
 
-    def normalize_with_uro(self):
+    # def normalize_with_uro(self):
+    async def normalize_with_uro(self):
         # If uro available, run it to normalize (best-effort) - uses subprocess sync
         if cmd_exists("uro"):
             self.log("Normalizing with uro (external tool)")
             try:
                 proc = shutil.which("uro")
-                p = asyncio.run(run_tool_collect([proc], input_data=list(self.all_urls)))
+
+                full_urls_for_uro = [f"https://{u}" for u in self.all_urls]
+                p = await run_tool_collect([proc], input_data=full_urls_for_uro)
                 # uro outputs full URLs maybe; strip scheme
                 normalized = [re.sub(r"^https?://", "", ln).rstrip("/") for ln in p]
                 self.all_urls = set(normalized)
@@ -411,7 +429,22 @@ class IHNUrls:
             self.ingest_lraw(Path(self.args.lraw), sc_filter=sc_set)
             self.log(f"Ingested -lraw -> {len(self.all_raw)} lines")
 
-        # If not skipping crawl and external tools exist, run async gatherers
+        if self.args.lraw and not self.args.skip_crawl:
+            self.log("Using hosts from -lraw result as new crawl input...")
+            hosts = set()
+            for u in self.all_raw:
+                host = u.split('/', 1)[0].split(':', 1)[0] # Ambil bagian host saja
+                hosts.add(host)
+
+            tmp = Path(".ihn_tmp_lraw_hosts.txt")
+            with tmp.open("w") as fh:
+                fh.write("\n".join(sorted(hosts)))
+
+            self.httpx_hosts = tmp
+            self.tmp_hosts_created = True # Agar otomatis dihapus
+            self.log(f"Overwrote host list. Now crawling {len(hosts)} hosts from -lraw result.")
+
+        # If not skipping crawl, run async gatherers
         if not self.args.skip_crawl:
             await self.gather_crawls()
 
@@ -420,7 +453,7 @@ class IHNUrls:
 
         # Normalize with uro if requested/available
         if cmd_exists("uro") and not self.args.skip_normalize:
-            self.normalize_with_uro()
+            await self.normalize_with_uro()
 
         # Optionally run gf extraction
         await self.gf_extract()
@@ -442,9 +475,9 @@ class IHNUrls:
 # CLI
 def build_argparser():
     p = argparse.ArgumentParser(prog="ihnurls", description="Async URL gathering & filtering pipeline (Python)")
-    p.add_argument("domains", nargs="*", help="domains (if not using -f or -lraw)")
+    p.add_argument("domains", nargs="*", help="domains (if use -f). Will be ignored if -lraw used.")
     p.add_argument("-l", "--list", dest="listfile", help="file with domains (one per line)")
-    p.add_argument("-f", "--hosts-file", dest="hosts_file", help="use existing hosts file directly")
+    p.add_argument("-f", "--hosts-file", dest="hosts_file", help="use existing hosts file directly. Will be ignored if -lraw used.")
     p.add_argument("-o", "--outdir", default="urls", help="output directory (default: urls)")
     p.add_argument("--cache-dir", default=str(Path.home() / ".cache" / "urls-cache"), help="cache directory")
     p.add_argument("-p", "--parallel", dest="concurrency", type=int, default=10, help="concurrency (default 10)")
@@ -455,7 +488,7 @@ def build_argparser():
     p.add_argument("--skip-hakrawler", action="store_true", dest="skip_hakrawler", help="skip hakrawler step")
     p.add_argument("--skip-normalize", action="store_true", dest="skip_normalize", help="skip uro normalization")
     p.add_argument("--keep-temp", action="store_true", dest="keep_temp", help="keep intermediate files (temp hosts)")
-    p.add_argument("-lraw", dest="lraw", help="file containing raw lines like: 'https://x [404] [Title] [Server]'")
+    p.add_argument("-lraw", dest="lraw", help="file containing raw lines. If use (without --skip-crawl), host from this file will be an input for crawl, ignored other input hosts.")
     p.add_argument("-sc", dest="sc", help="comma-separated status codes to filter when using -lraw (e.g. 200,404)")
     p.add_argument("-v", "--verbose", action="store_true", help="verbose mode")
     return p
