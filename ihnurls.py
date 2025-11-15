@@ -293,8 +293,8 @@ class IHNUrls:
                 full_urls_for_uro = [f"https://{u}" for u in self.all_urls]
                 p = await run_tool_collect([proc], input_data=full_urls_for_uro)
                 # uro outputs full URLs maybe; strip scheme
-                normalized = [re.sub(r"^https?://", "", ln).rstrip("/") for ln in p]
-                self.all_urls = set(normalized)
+                # normalized = [re.sub(r"^https?://", "", ln).rstrip("/") for ln in p] (uncomment if want to without https://)
+                self.all_urls = set(p)
             except Exception:
                 pass
 
