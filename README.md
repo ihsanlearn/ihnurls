@@ -228,9 +228,6 @@ Use responsibly and only on systems where you have explicit permission.
 
 ---
 
-## License
-
 ## Author
 
-Developed by iihhn
-Focused on penetration testing, automation, and modern recon tooling.
+Developed by iihhn, focused on penetration testing, automation, and modern recon tooling.
