@@ -230,8 +230,6 @@ Use responsibly and only on systems where you have explicit permission.
 
 ## License
 
-MIT License  
-
 ## Author
 
 Developed by iihhn
