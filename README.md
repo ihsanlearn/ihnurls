@@ -234,7 +234,6 @@ MIT License
 Copyright (c) 2025
 
 
-
 ## Author
 
 Developed by iihhn
