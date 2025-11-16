@@ -231,8 +231,6 @@ Use responsibly and only on systems where you have explicit permission.
 ## License
 
 MIT License  
-Copyright (c) 2025
-
 
 ## Author
 
