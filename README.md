@@ -1,21 +1,19 @@
-<pre align="left">
+<div align="center">
+<pre>
 .__.__                        .__          
 |__|  |__   ____  __ _________|  |   ______
 |  |  |  \ /    \|  |  \_  __ \  |  /  ___/
 |  |   Y  \   |  \  |  /|  | \/  |__\___ \ 
 |__|___|  /___|  /____/ |__|  |____/____  >
         \/     \/                       \/ 
-</pre>
 Advanced Asynchronous URL Extraction, Filtering & Recon Toolkit  
-<br>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Asyncio-Enabled-brightgreen?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Rich-Colored%20CLI-orange?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Status-Active-success?style=for-the-badge">
-  <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=for-the-badge">
+</pre>
+<p align="">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT">
+  <img src="https://img.shields.io/badge/Async-Powered-purple?style=for-the-badge&logo=python" alt="Async Powered">
 </p>
+</div>
 
 ---
 
